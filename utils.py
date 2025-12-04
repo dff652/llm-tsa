@@ -14,7 +14,10 @@ def ts_downsample(data, downsampler='m4', n_out=100000):
     Downsample time series data
     :param data: pd.Series
     :param downsampler: str
-    :return: numpy.array, numpy.array
+    :return: (downsampled_data, time_index, position_index)
+        - downsampled_data: pd.Series, 下采样后的数据
+        - time_index: 下采样点对应的原始时间索引
+        - position_index: 下采样点对应的原始位置索引（整数数组，用于映射）
     """
 
     if downsampler == 'm4':
@@ -25,7 +28,7 @@ def ts_downsample(data, downsampler='m4', n_out=100000):
     downsampled_data = data.iloc[s_ds]
     downsampled_time = data.index[s_ds]
 
-    return downsampled_data, downsampled_time
+    return downsampled_data, downsampled_time, s_ds
 
 
 
@@ -89,24 +92,21 @@ def extract_anomalies(text: str):
     return anomalies
 
 
-def map_anomalies_to_original(anomalies, time_index):
+def map_anomalies_to_original(anomalies, position_index):
     """
     将下采样序列上的异常索引映射到原始 DataFrame 索引。
     
     Args:
         anomalies: 模型返回的异常列表，每个元素包含 "range": [start, end]
-        time_index: ts_downsample 返回的 time_index（原始数据的索引）
+        position_index: ts_downsample 返回的 position_index（整数位置索引数组）
     
     Returns:
-        映射后的异常列表，range 变为原始数据索引
+        映射后的异常列表，range 变为原始数据的位置索引
     """
     import numpy as np
     
-    # 将 time_index 转换为可索引的数组
-    if hasattr(time_index, 'values'):
-        idx_array = time_index.values
-    else:
-        idx_array = np.asarray(time_index)
+    # 将 position_index 转换为 numpy 数组
+    idx_array = np.asarray(position_index)
     
     mapped = []
     for a in anomalies:
@@ -116,7 +116,7 @@ def map_anomalies_to_original(anomalies, time_index):
         ds_start = max(0, min(ds_start, len(idx_array) - 1))
         ds_end = max(0, min(ds_end, len(idx_array) - 1))
         
-        # 通过 time_index 映射到原始索引
+        # 通过 position_index 映射到原始位置索引
         orig_start = int(idx_array[ds_start])
         orig_end = int(idx_array[ds_end])
         

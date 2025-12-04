@@ -306,7 +306,7 @@ if __name__ == "__main__":
     df = pd.read_csv(csv_path, index_col=0)
     
     n =768
-    downsampled_data, time_index = ts_downsample(df['PI_20412.PV'],  n_out=n)
+    downsampled_data, time_index, position_index = ts_downsample(df['PI_20412.PV'],  n_out=n)
     downsampled_ts = downsampled_data.values
         
     analyzer = ChatTSAnalyzer(
@@ -356,8 +356,8 @@ if __name__ == "__main__":
     anomalies = extract_anomalies(text)
     print(len(anomalies), anomalies[:1])
     
-    # 将异常索引映射到原始数据
-    mapped_anomalies = map_anomalies_to_original(anomalies, time_index)
+    # 将异常索引映射到原始数据（使用 position_index）
+    mapped_anomalies = map_anomalies_to_original(anomalies, position_index)
     print("映射后的异常（原始数据索引）:", mapped_anomalies[:1])
     
     # 使用原始数据和映射后的异常进行绘图

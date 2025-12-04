@@ -25,3 +25,7 @@ Thumbs.db
 
 # Results (optional - uncomment if you want to exclude)
 # Results/
+
+# Pictures
+*.png
+
