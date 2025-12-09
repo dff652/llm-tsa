@@ -617,41 +617,92 @@ if __name__ == "__main__":
     # 示例：TIMER 单步预测
     # ---------------------------
     # 单卡/CPU 模式
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    csv_path = os.path.join(script_dir, 'Data', 'PI_20412.PV.csv')
+    
+    df = pd.read_csv(csv_path, index_col=0)
+    data = df['PI_20412.PV']
+
+    n = 10000
+    downsampled_data, time = ts_downsample(data,  n_out=n)
+    downsampled_ts = downsampled_data.values
+
     pipeline = TimerAnomalyPipeline(
         model_path="/home/data1/llm_models/thuml/timer-base-84m",
         device="cuda:0",  # 单卡：使用 "cuda:0" 或 "cpu"
     )
-    fake_series = torch.randn(2880, dtype=torch.float32)
-    forecast = pipeline.generate_forecast(
-        lookback_length=2880,
-        forecast_length=96,
-        input_seqs=fake_series.unsqueeze(0),
+
+    st = time.time()
+    residuals, intervals = pipeline.detect_series(
+        downsampled_ts,
+        lookback_length=256,
+        reset_interval=128,
+        num_samples=None,
+        forecast_horizon=1,
+        residual_step=0,
+        threshold_k=5,
+        min_run=1,
+        streaming=False,
+        method='sigma',
+        custom_detector=None,
+        
     )
-    print("TIMER forecast shape:", tuple(forecast.shape))
+    et = time.time()
+    print(et -st )
+    print("Residuals length:", residuals.shape)
+    print("Detected intervals:", intervals)
+
+    # 可视化结果
+    from ts_ad.utils import plot_timer_anomalies
+    fig, ax, notes = plot_timer_anomalies(
+    original_series=downsampled_ts,
+    residuals=residuals,
+    intervals=intervals,
+    lookback_length=256,
+    forecast_horizon=1,
+    residual_step=0,
+    marker_fontsize=20,
+    info_fontsize=14,
+    )
+    print("\n异常说明：\n", notes)
+    # plt.show()  # 或 fig.savefig("anomalies.png")
+
+    results_dir = os.path.join(script_dir, 'Results')
+    os.makedirs(results_dir, exist_ok=True)  # 确保 Results 目录存在
+    plt.savefig(os.path.join(results_dir, 'ChatTS_anomalies.png'))
+
+    # fake_series = torch.randn(2880, dtype=torch.float32)
+    # forecast = pipeline.generate_forecast(
+    #     lookback_length=2880,
+    #     forecast_length=96,
+    #     input_seqs=fake_series.unsqueeze(0),
+    # )
+    # print("TIMER forecast shape:", tuple(forecast.shape))
 
     # ---------------------------
     # 示例：端到端异常检测
     # ---------------------------
     # 多卡模式：使用 "auto" 自动分配，或手动指定 device_map
-    sundial_pipeline = TimerAnomalyPipeline(
-        model_path="/home/data1/llm_models/thuml/sundial-base-128m",
-        device="auto",  # 多卡：使用 "auto" 自动分配，或传入 device_map 字典
-        # 手动指定示例：
-        # device={"": 0, "transformer.layers.0": 0, "transformer.layers.1": 1, ...}
-    )
-    long_series = np.sin(np.linspace(0, 200, 4000)).astype(np.float32)
-    long_series[2500:2510] += 3.0  # 注入简单异常
+    # sundial_pipeline = TimerAnomalyPipeline(
+    #     model_path="/home/data1/llm_models/thuml/sundial-base-128m",
+    #     device="auto",  # 多卡：使用 "auto" 自动分配，或传入 device_map 字典
+    #     # 手动指定示例：
+    #     # device={"": 0, "transformer.layers.0": 0, "transformer.layers.1": 1, ...}
+    # )
+    # long_series = np.sin(np.linspace(0, 200, 4000)).astype(np.float32)
+    # long_series[2500:2510] += 3.0  # 注入简单异常
 
-    residuals, intervals = sundial_pipeline.detect_series(
-        long_series,
-        lookback_length=288,
-        reset_interval=128,
-        num_samples=10,
-        forecast_horizon=3,
-        residual_step=0,
-        threshold_k=3.0,
-        min_run=2,
-    )
+    # residuals, intervals = sundial_pipeline.detect_series(
+    #     long_series,
+    #     lookback_length=288,
+    #     reset_interval=128,
+    #     num_samples=10,
+    #     forecast_horizon=3,
+    #     residual_step=0,
+    #     threshold_k=3.0,
+    #     min_run=2,
+    # )
+
     # 也可以尝试 method="sigma" 或自定义检测器，例如：
     # residuals, intervals = sundial_pipeline.detect_series(
     #     long_series,
@@ -659,26 +710,26 @@ if __name__ == "__main__":
     #     method="sigma",
     #     threshold_k=3.5,
     # )
-    print("Residuals length:", residuals.shape[0])
-    print("Detected intervals:", intervals)
+    # print("Residuals length:", residuals.shape[0])
+    # print("Detected intervals:", intervals)
     
     # 诊断残差分布（帮助理解误报原因）
-    import json
-    diag = sundial_pipeline.diagnose_residuals(residuals, residual_step=0, threshold_k=3.0)
-    print("\n=== 残差诊断 ===")
-    print(json.dumps(diag, indent=2, ensure_ascii=False))
+    # import json
+    # diag = sundial_pipeline.diagnose_residuals(residuals, residual_step=0, threshold_k=3.0)
+    # print("\n=== 残差诊断 ===")
+    # print(json.dumps(diag, indent=2, ensure_ascii=False))
     
     # 可视化结果
-    from ts_ad.utils import plot_timer_anomalies
-    fig, ax, notes = plot_timer_anomalies(
-        original_series=long_series,
-        residuals=residuals,
-        intervals=intervals,
-        lookback_length=288,
-        forecast_horizon=3,
-        residual_step=0,
-        marker_fontsize=20,
-        info_fontsize=14,
-    )
-    print("\n异常说明：\n", notes)
-    plt.show()  # 或 fig.savefig("anomalies.png")
+    # from ts_ad.utils import plot_timer_anomalies
+    # fig, ax, notes = plot_timer_anomalies(
+    #     original_series=long_series,
+    #     residuals=residuals,
+    #     intervals=intervals,
+    #     lookback_length=288,
+    #     forecast_horizon=3,
+    #     residual_step=0,
+    #     marker_fontsize=20,
+    #     info_fontsize=14,
+    # )
+    # print("\n异常说明：\n", notes)
+    # plt.show()  # 或 fig.savefig("anomalies.png")
